@@ -1,5 +1,8 @@
 """
 FastAPI 서버와 Streamlit 앱 동시 실행.
+
+메인 애플리케이션 실행(run.py) 명령어
+python run.py
 """
 
 import os
