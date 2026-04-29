@@ -53,8 +53,8 @@ def start_server():
         env = os.environ.copy()
         env['PYTHONPATH'] = str(PROJECT_ROOT)
         
-        print(f"환경변수 PYTHONPATH 설정: {PROJECT_ROOT}")
-        print(f"작업 디렉토리: {BACKEND_DIR}")
+        print(f"환경변수 PYTHONPATH 설정: {str(PROJECT_ROOT)}")
+        print(f"작업 디렉토리: {str(BACKEND_DIR)}")
         
         # stdout=subprocess.PIPE, stderr=subprocess.STDOUT 등을 쓰면 로그가 엉킬 수 있어 기본 출력 설정.
         # [설정 필수!] "--host", "0.0.0.0", : Docker 컨테이너에 환경을 묶어 올리거나, 모바일 기기(같은 Wi-Fi)에서 접속 테스트를 하거나, 클라우드 서버 배포 및 외부 트래픽 받기 위한 용도
@@ -95,8 +95,8 @@ def start_streamlit():
         env = os.environ.copy()
         env['PYTHONPATH'] = str(PROJECT_ROOT)
         
-        print(f"환경변수 PYTHONPATH 설정: {PROJECT_ROOT}")
-        print(f"작업 디렉토리: {FRONTEND_DIR}")
+        print(f"환경변수 PYTHONPATH 설정: {str(PROJECT_ROOT)}")
+        print(f"작업 디렉토리: {str(FRONTEND_DIR)}")
         
         process = subprocess.Popen(
             # [sys.executable, "-m", "streamlit", "run", "main_page.py", 
