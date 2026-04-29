@@ -3,6 +3,10 @@ FastAPI 서버와 Streamlit 앱 동시 실행.
 
 메인 애플리케이션 실행(run.py) 명령어
 python run.py
+
+* 파이썬 공식 문서
+sys.exit(1) 함수
+참고: https://docs.python.org/ko/3/library/sys.html#sys.exit
 """
 
 import os
@@ -39,85 +43,125 @@ def signal_handler(signum, frame):
     
     print("모든 서버 종료 완료.")
     sys.exit(0)
+    
+def start_server():
+    """FastAPI 서버 시작"""
+    print("FastAPI 서버 시작 준비")
+    
+    try:
+        # 백엔드 디렉토리 서버 실행
+        env = os.environ.copy()
+        env['PYTHONPATH'] = str(PROJECT_ROOT)
+        
+        print(f"환경변수 PYTHONPATH 설정: {PROJECT_ROOT}")
+        print(f"작업 디렉토리: {BACKEND_DIR}")
+        
+        # stdout=subprocess.PIPE, stderr=subprocess.STDOUT 등을 쓰면 로그가 엉킬 수 있어 기본 출력 설정.
+        # [설정 필수!] "--host", "0.0.0.0", : Docker 컨테이너에 환경을 묶어 올리거나, 모바일 기기(같은 Wi-Fi)에서 접속 테스트를 하거나, 클라우드 서버 배포 및 외부 트래픽 받기 위한 용도
+        process = subprocess.Popen(
+            [sys.executable, "-m", "uvicorn", "src.server:app", "--host", "0.0.0.0", "--port", "8000", "--reload"],
+            # [sys.executable, "-m", "uvicorn", "src.server:app", "--host", "127.0.0.1", "--port", "8000", "--reload"],
+            cwd=BACKEND_DIR,
+            env=env,
+            # stdout=subprocess.PIPE,
+            # stderr=subprocess.STDOUT,
+            universal_newlines=True
+        )
+
+        processes.append(process)
+        print("FastAPI 프로세스 -> 프로세스 리스트 추가 완료")
+        
+        # 서버 시작 대기
+        print("FastAPI 서버 시작 대기 중...")
+        time.sleep(3)
+        
+        if process.poll() is None:
+            print("FastAPI 서버 시작. (http://localhost:8000)")
+            return True
+        else:
+            print("[오류] FastAPI 서버 시작 실패")
+            return False
+            
+    except Exception as e:
+        print(f"[오류] FastAPI 서버 시작 중 오류: {e}")
+        return False
+    
+def start_streamlit():
+    """Streamlit 앱 시작"""
+    print("Streamlit 앱 시작 준비")
+    
+    try:
+        # 프론트엔드 디렉토리 앱 실행
+        env = os.environ.copy()
+        env['PYTHONPATH'] = str(PROJECT_ROOT)
+        
+        print(f"환경변수 PYTHONPATH 설정: {PROJECT_ROOT}")
+        print(f"작업 디렉토리: {FRONTEND_DIR}")
+        
+        process = subprocess.Popen(
+            # [sys.executable, "-m", "streamlit", "run", "main_page.py", 
+            #  "--server.port", "8501",
+            #  "--server.address", "0.0.0.0"],
+            # [sys.executable, "-m", "streamlit", "run", "main_page.py", 
+            # "--server.port", "8501",
+            # "--server.address", "127.0.0.1",
+            # "--server.headless", "true"], # 헤드리스 모드(Streamlit 이메일 묻는 과정 생략) 추가
+            [sys.executable, "-m", "streamlit", "run", "main_page.py", 
+             "--server.port", "8501",
+             "--server.address", "0.0.0.0",
+             "--server.headless", "true"], # 헤드리스 모드(Streamlit 이메일 묻는 과정 생략) 추가
+            cwd=FRONTEND_DIR,
+            env=env,
+            # stdout=subprocess.PIPE,
+            # stderr=subprocess.STDOUT,
+            universal_newlines=True
+        )
+            
+        processes.append(process)
+        print("Streamlit 프로세스 -> 프로세스 리스트 추가 완료")
+        
+        # 앱 시작 대기
+        print("Streamlit 앱 시작 대기 중...")
+        time.sleep(5)
+        
+        if process.poll() is None:
+            print("Streamlit 앱 시작. (http://localhost:8501)")
+            return True
+        else:
+            print("[오류] Streamlit 앱 시작 실패")
+            return False
+            
+    except Exception as e:
+        print(f"[오류] Streamlit 앱 시작 중 오류: {e}")
+        return False
 
 def main():
-    print("Health-Eat 통합 서버 구동 시작")
+    print("Health-Eat 메인 함수 시작")
     
-    print(f"PROJECT_ROOT: {PROJECT_ROOT}")
-    print(f"BACKEND_DIR: {BACKEND_DIR}")
-    print(f"FRONTEND_DIR: {FRONTEND_DIR}")
+    # print(f"PROJECT_ROOT: {PROJECT_ROOT}")
+    # print(f"BACKEND_DIR: {BACKEND_DIR}")
+    # print(f"FRONTEND_DIR: {FRONTEND_DIR}")
     
     # 시그널 핸들러 등록
     print("시그널 핸들러 등록")
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
-    # 백엔드 디렉토리에서 서버 실행
-    env = os.environ.copy()
-    env['PYTHONPATH'] = str(PROJECT_ROOT)
-    # Streamlit 이메일 묻는 화면을 강제로 무시하는 환경 변수 설정
-    env['STREAMLIT_SERVER_HEADLESS'] = 'true'
-
-    # 1. FastAPI 백엔드 서버 백그라운드 실행
-    # stdout=subprocess.PIPE 등을 쓰면 로그가 엉킬 수 있어 기본 출력으로 둡니다.
-    process = subprocess.Popen(
-        # [sys.executable, "-m", "uvicorn", "src.server:app", "--host", "0.0.0.0", "--port", "8000", "--reload"],
-        [sys.executable, "-m", "uvicorn", "src.server:app", "--host", "127.0.0.1", "--port", "8000", "--reload"],
-        cwd=BACKEND_DIR,
-        env=env,
-        # stdout=subprocess.PIPE,
-        # stderr=subprocess.STDOUT,
-        universal_newlines=True
-    )
+    # FastAPI 서버 시작
+    if not start_server():
+        print("[오류] FastAPI 서버 시작 실패로 인한 프로그램 종료")
+        sys.exit(1)
     
-    processes.append(process)
-    print("FastAPI 프로세스 -> 프로세스 리스트 추가 완료")
+    # Streamlit 앱 시작
+    if not start_streamlit():
+        print("[오류] Streamlit 앱 시작 실패로 인한 프로그램 종료")
+        sys.exit(1)
     
-    print("FastAPI 백엔드 서버 시작 요청 완료 (포트: 8000)")
-
-    # 백엔드가 완전히 뜰 때까지 아주 잠깐 대기 (안정성을 위해)
-    time.sleep(3)
-    
-    if process.poll() is None:
-        print("FastAPI 서버 시작. (http://localhost:8000)")
-        
-    else:
-        print("FastAPI 서버 시작 실패")
-
-    # 2. Streamlit 프론트엔드 실행
-    process = subprocess.Popen(
-        # [sys.executable, "-m", "streamlit", "run", "home_page.py", 
-        #  "--server.port", "8501",
-        #  "--server.address", "0.0.0.0"],
-        [sys.executable, "-m", "streamlit", "run", "home_page.py", 
-         "--server.port", "8501",
-         "--server.address", "127.0.0.1",
-         "--server.headless", "true"], # 헤드리스 모드(이메일 생략) 추가
-         cwd=FRONTEND_DIR,
-         env=env,
-         # stdout=subprocess.PIPE,
-         # stderr=subprocess.STDOUT,
-         universal_newlines=True
-    )
-        
-    processes.append(process)
-    print("Streamlit 프로세스 -> 프로세스 리스트 추가 완료")
-    print("Streamlit 프론트엔드 시작 요청 완료")
-    
-    # Streamlit 프론트엔드 완전히 뜰 때까지 아주 잠깐 대기 (안정성을 위해)
-    time.sleep(5)
-    
-    if process.poll() is None:
-        print("Streamlit 앱 시작. (http://localhost:8501)")
-
-    else:
-        print("Streamlit 앱 시작 실패")
-
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        print("KeyboardInterrupt 감지")
+        print("[오류] KeyboardInterrupt 감지")
         signal_handler(signal.SIGINT, None)
 
 if __name__ == "__main__":

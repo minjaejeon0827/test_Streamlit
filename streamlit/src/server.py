@@ -20,13 +20,13 @@ async def root():
         # 실제 환경에서는 DB 연결 확인이나 GPU 상태 등 체크 가능.
         return {
             "status": "success", 
-            "message": "Health-Eat AI 백엔드 서버가 정상 작동 중입니다.",
+            "message": "Health-Eat AI FastAPI 서버 정상 작동 중!",
             "version": "1.0"
         }
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-# 예시: 나중에 이 아래에 AI 알약 인식 API 추가 예정.(2026.04.28 minjae)
+# TODO: 필요 시 이 아래에 Rest API 추가 구현 예정.(2026.04.28 minjae)
 # @app.post("/detect")
 # async def detect_pill(file: UploadFile = File(...)):
 #     ...
