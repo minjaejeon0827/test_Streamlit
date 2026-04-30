@@ -12,7 +12,10 @@ from pathlib import Path
 # 프로젝트 루트 디렉토리 설정
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CSS_FILE_NAME = PROJECT_ROOT / "public" / "css" / "main.css"
-FOOTER_FILE_NAME = PROJECT_ROOT / "public" / "images" / "footer_banner.png"
+FOOTER_BANNER_FILE_NAME = PROJECT_ROOT / "public" / "images" / "footer_banner.png"
+RIGHT_BANNER_FILE_NAME = PROJECT_ROOT / "public" / "images" / "right_banner.png"
+LOCALHOST = str("http://127.0.0.1:8000/")
+DETECT_URL = f"{LOCALHOST}detect"
 
 def load_css(file_name):
     """main.css 파일 로드 및 Streamlit 적용"""
@@ -29,7 +32,7 @@ def display_server_connection():
     
     try:
         # FastAPI 서버(기본 포트 8000) 루트 엔드포인트("/") Http GET 통신. (안정성을 위해 2초 타임아웃 설정)
-        response = requests.get("http://127.0.0.1:8000/", timeout=2)
+        response = requests.get(LOCALHOST, timeout=2)
         if response.status_code == 200:
             st.sidebar.success("🟢 서버 연결됨")
         else:
@@ -38,6 +41,44 @@ def display_server_connection():
     # except requests.exceptions.ConnectionError:
     except requests.exceptions.RequestException:
         st.sidebar.error("🔴 서버 꺼져있음")  # ConnectionError뿐만 아니라 Timeout 등 모든 요청 관련 에러 포괄하여 처리
+    
+def post_detect_async(uploaded_file):
+    # 1. 서버로 보낼 '파일 상자' 만들기
+    # (파일 이름, 파일의 실제 데이터, 파일 종류) 순서로 포장.
+    files = {"file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)}
+        
+    try:             
+        # 2. FastAPI 서버의 /detect 창구로 POST 통신(요청) 쏘기!
+        # timeout=10 은 서버가 10초 안에 답이 없으면 포기.
+        response = requests.post(DETECT_URL, files=files, timeout=10)
+                                        
+        # 3. 서버가 무사히 답장을 줬는지(200 OK) 확인하기
+        if response.status_code == 200:
+            # 서버가 준 JSON 답장을 파이썬 딕셔너리 변환.
+            result = response.json()
+            st.success(f"🎉 탐지 성공! 서버 메시지: {result['message']}")
+            st.info(f"💊 찾은 알약: {', '.join(result['detected_pills'])}")
+        else:
+            # ==========================================
+            # 에러가 났을 때 서버가 보낸 진짜 이유(detail) 꺼내 읽기!
+            # ==========================================
+            try:
+                # 서버가 보낸 에러 포장지(JSON)를 풉니다.
+                error_data = response.json()
+                
+                # 포장지 안에 'detail'이라는 쪽지가 있으면 읽고, 없으면 기본 메시지 출력
+                error_detail = error_data.get("detail", "알 수 없는 에러가 발생했습니다.")
+                
+                # 우리가 원하던 바로 그 형태의 에러 메시지를 화면에 띄웁니다!
+                st.error(f"⚠️ {response.status_code} Bad Request: {error_detail}")
+                
+            except ValueError:
+                # 만약 서버가 치명적으로 고장나서 JSON 포장지조차 못 만들고 죽었을 때를 대비한 안전망
+                st.error(f"⚠️ 서버 오류 발생! (상태 코드: {response.status_code})")                   
+    
+    except requests.exceptions.RequestException as e:
+        # 서버가 꺼져있거나 통신이 끊겼을 때 프로그램이 죽지 않게 막아주기.
+        st.error(f"🔴 서버 통신 불가. (에러: {e})")
     
 def main_page():
     """Streamlit 메인 웹페이지"""
@@ -52,7 +93,8 @@ def main_page():
         st.set_page_config(
             page_title="Health-Eat | 알약 탐지 서비스",
             page_icon="💊",
-            layout="centered"
+            # layout="centered",
+            layout="wide"
         )
         
         # ==========================================
@@ -112,7 +154,8 @@ def main_page():
 
                 if uploaded_file is None:
                     # 파일이 없을 때 기본 메시지
-                    st.write("사진 업로드 시 AI 모델이 알약을 탐지합니다.")
+                    # st.write("사진 업로드 시 AI 모델이 알약을 탐지합니다.")
+                    pass
                 else:
                     # ==========================================
                     # 핵심 추가 코드: 이미지가 업로드되면 업로더 전체를 화면에서 숨깁니다!
@@ -126,7 +169,7 @@ def main_page():
                         """, unsafe_allow_html=True)
                     # ==========================================
                     
-                    # 선택된 이미지 화면에 출력
+                    # 선택된 이미지 화면 출력
                     st.image(uploaded_file, width="stretch")
                     
                     # 이미지가 있을 때만 "탐지", "닫기" 버튼 활성화
@@ -134,31 +177,39 @@ def main_page():
                     
                     with btn_col1:
                         if st.button("탐지", width="stretch"):
-                            st.session_state['show_detect_msg'] = True
+                            # st.session_state['show_detect_msg'] = True
+                            with st.spinner("AI가 알약을 꼼꼼히 분석하고 있어요... 🔍"):
+                                post_detect_async(uploaded_file)
                     
                     with btn_col2:
                         if st.button("닫기", width="stretch"):
                             # 닫기 누르면 이미지 초기화
                             # uploader_key 숫자를 1 올리면, Streamlit은 파일 업로더가 완전히 새로 생긴 줄 알고 안의 파일을 비워버립니다.
                             st.session_state['uploader_key'] += 1
-                            st.session_state['show_detect_msg'] = False # 탐지 메시지도 함께 지움
+                            # st.session_state['show_detect_msg'] = False # 탐지 메시지도 함께 지움
                             st.rerun() # 즉시 화면 새로고침
 
                     # 탐지 버튼 클릭 시 메시지 출력
-                    if st.session_state['show_detect_msg']:
-                        st.info("[안내] 알약 탐지 기능 추후 구현 예정!")
+                    # if st.session_state['show_detect_msg']:
+                    #     st.info("[안내] 알약 탐지 기능 추후 구현 예정!")
 
         with col2:
             with st.container(border=True):
-                st.markdown("### 📋 내 약 정보")
+                st.markdown("### 📋 주의사항")
                 st.caption("Medication Info")
-                st.write("현재 복용 중인 약의 정보 및 스케줄 관리.")
+                st.write("탐지한 알약 주의사항 설명.")
                 
-                if st.button("🔍 약 정보 확인"):
-                    st.info("내 약 정보를 불러옵니다... (API 연동 필요)")
+                # if st.button("🔍 약 정보 확인"):
+                #     st.info("내 약 정보를 불러옵니다... (API 연동 필요)")
                     
-        # width="stretch" 옵션을 넣으면 상단 레이아웃 너비에 맞춰 100% 꽉 차게 확장됩니다.
-        st.image(str(FOOTER_FILE_NAME), width="stretch")
+        # with col3:  # (오른쪽 배너 공간)
+        #     # 오른쪽 배너 이미지를 넣습니다.
+        #     # width="stretch" 옵션을 넣으면 상단 레이아웃 너비에 맞춰 100% 꽉 차게 확장됩니다.
+        #     st.image(str(RIGHT_BANNER_FILE_NAME), width="stretch")
+        #     st.write("")  # 아직 이미지가 없다면 빈 공간 두기.
+                    
+        # st.write("")  # 빈 공간 두기.
+        # st.image(str(FOOTER_BANNER_FILE_NAME), width="stretch")
 
         # 7. 간단한 푸터
         st.markdown("---")

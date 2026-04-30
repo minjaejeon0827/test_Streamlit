@@ -1,4 +1,49 @@
 /* public/main.css */
+
+/* 1. Streamlit 기본 상하 여백을 확 줄여서 스크롤바 방지 및 화면 끌어올리기 */
+.block-container {
+    padding-top: 10rem !important;
+    padding-bottom: 5rem !important;
+    max-width: 95% !important; 
+}
+
+/* =========================================
+   사이드바 상단 여백 (메인 화면과 높이 맞추기)
+   ========================================= */
+/* 사이드바 안쪽 내용물도 메인 화면과 똑같이 10rem 만큼 밑으로 내립니다 */
+[data-testid="stSidebarUserContent"] {
+    padding-top: 7rem !important;
+}
+
+/* =========================================
+   1. 하단 배너 가운데 정렬 (원본 크기 유지)
+   ========================================= */
+/* 투명 상자를 가로로 넓게 폅니다 */
+[data-testid="stImage"],
+[data-testid="stImage"] > div {
+    width: 100% !important;
+    display: flex !important;
+    justify-content: center !important; 
+}
+
+/* 배너 이미지는 늘리지 않고, 여백을 이용해 가운데로 밉니다 */
+[data-testid="stImage"] img {
+    width: auto !important;       /* 투명 상자가 100%여도, 이미지는 억지로 커지지 않게 방어! */
+    max-width: 100% !important; 
+    height: auto !important;      
+    margin: 0 auto !important;    /* 왼쪽, 오른쪽 빈 공간(여백)을 똑같이 나눠 가져서 완벽한 중앙 정렬! */
+    display: block !important;    /* margin auto가 제대로 작동하도록 설정 */
+    object-fit: contain !important; 
+    border-radius: 12px !important;
+}
+
+/* 파일 업로더 안의 알약 사진은 망가지지 않게 유지 */
+[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stImage"] img {
+    max-height: 350px !important; 
+    border-radius: 8px !important;
+}
+/* ========================================= */
+
 .main { background-color: #f8f9fa; }
 
 .stButton>button {
@@ -24,73 +69,83 @@ div[data-testid="stVerticalBlock"] > div:has(div.stHeader) {
 }
 
 /* =========================================
-   파일 업로더(Drag & Drop) 기획안 완벽 동기화 (고급 CSS)
+   2. 파일 업로더(Drag & Drop) 영역 완벽 정렬
    ========================================= */
 
-/* 1. 업로드 박스 뼈대 만들기 (기획안의 회색 박스) */
+/* 1. 업로드 박스 전체 틀 (높이를 아예 고정시켜 줍니다) */
 [data-testid="stFileUploaderDropzone"] {
     background-color: #f1f3f5 !important;
     border-radius: 10px !important;
-    padding: 60px 20px 40px 20px !important; /* 위쪽 여백을 더 주어 텍스트 들어갈 공간 확보 */
-    border: none !important; /* 테두리가 없어 제거함 */
-    position: relative !important;
+    border: none !important;
+    height: 200px !important; /* 유연한 min-height 대신 확고한 height 사용 */
+    position: relative !important; /* 내부 요소들의 '절대 위치' 기준점이 됩니다 */
+    display: block !important;
+    overflow: hidden !important; /* 혹시 모를 삐져나감 완벽 차단 */
+}
+
+/* 2. 방해되는 기본 아이콘(구름)과 텍스트 완전 삭제 */
+[data-testid="stFileUploaderDropzone"] svg,
+[data-testid="stFileUploaderDropzone"] small {
+    display: none !important;
+}
+
+/* 3. 텍스트 감싸는 투명 상자 강제 중앙 정렬 */
+[data-testid="stFileUploaderDropzone"] > div > div {
+    color: transparent !important;
+    position: absolute !important; 
+    top: 50px !important; /* 위에서 50px 위치에 고정 */
+    left: 0 !important;
+    width: 100% !important;
+    height: 30px !important;
+    margin: 0 !important; 
     display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
     justify-content: center !important;
 }
 
-/* 2. Streamlit이 기본으로 뿌려주는 문구와 아이콘(구름 모양) 숨기기 */
-[data-testid="stFileUploaderDropzone"] > div > div::before,
-[data-testid="stFileUploaderDropzone"] > div > div > span,
-[data-testid="stFileUploaderDropzone"] > div > div > small {
-    display: none !important; 
-}
-
-/* 3. 기획안 텍스트 강제 주입 ("첨부할 파일을 여기에...") */
-/* 박스 최상단에 가상의 텍스트 레이어를 띄웁니다 */
-[data-testid="stFileUploaderDropzone"]::before {
-    content: "첨부할 파일을 여기에 끌어다 놓거나. 파일 선택 버튼을 직접 선택해주세요." !important;
-    position: absolute !important;
-    top: 40px !important; /* 상단에서 약간 내림 */
-    left: 0 !important;
-    width: 100% !important;
-    text-align: center !important;
+/* 4. 한글 텍스트 덮어쓰기 (가운데 정렬) */
+[data-testid="stFileUploaderDropzone"] > div > div::after {
+    content: "첨부할 파일을 여기에 끌어다 놓거나, 파일 선택 버튼을 직접 선택해주세요." !important;
     color: #495057 !important;
     font-size: 14px !important;
     font-weight: 500 !important;
-    pointer-events: none !important; /* 글씨를 클릭해도 방해받지 않게 함 */
+    position: absolute !important;
+    width: 100% !important;
+    text-align: center !important;
+    word-break: keep-all !important;
 }
 
-/* 4. 'Browse files' 기본 버튼을 숨기고, 그 자리에 투명한 클릭 영역만 남김 */
+/* 5. 파일 선택 버튼 튕겨나감 완벽 방어 (Absolute Position) */
 [data-testid="stFileUploaderDropzone"] button {
-    color: transparent !important; /* 원래 글씨(Browse files) 투명화 */
-    background-color: #2b70f9 !important; /* 기획안의 파란색 버튼 배경 */
+    color: transparent !important; 
+    background-color: #2b70f9 !important; 
     border: none !important;
     border-radius: 6px !important;
-    padding: 12px 30px !important;
-    position: relative !important;
-    margin-top: 30px !important; /* 위쪽 텍스트와의 간격 확보 */
-    width: auto !important;
-    min-width: 120px !important;
+    width: 140px !important;
+    height: 45px !important; /* 버튼 높이 고정 */
+    padding: 0 !important;
+    margin: 0 !important; 
+    position: absolute !important; /* 🌟 박스 안 지정된 위치에 절대적으로 못 박기! */
+    top: 110px !important; /* 위에서 110px 위치에 고정 */
+    left: 50% !important; /* 가로 중앙으로 밀기 */
+    transform: translateX(-50%) !important; /* 완벽한 가로 중앙 정렬 */
     transition: all 0.3s ease !important;
+    display: block !important;
 }
 
-/* 5. 기획안 버튼 텍스트 강제 주입 ("파일선택") */
-/* 버튼 위에 가상의 글씨를 띄웁니다 */
+/* 6. 버튼 안쪽 한글 텍스트 */
 [data-testid="stFileUploaderDropzone"] button::after {
-    content: "📥 파일선택" !important; /* 기획안의 다운로드 아이콘 느낌의 이모지 추가 */
-    color: white !important; /* 글씨 색상 흰색 */
+    content: "📥 파일선택" !important; 
+    color: white !important; 
     font-size: 15px !important;
     font-weight: bold !important;
     position: absolute !important;
     top: 50% !important;
     left: 50% !important;
-    transform: translate(-50%, -50%) !important; /* 글씨를 버튼 한가운데 정렬 */
+    transform: translate(-50%, -50%) !important;
     pointer-events: none !important;
+    line-height: 1 !important;
 }
 
-/* 6. 버튼 호버(마우스 올렸을 때) 효과 */
 [data-testid="stFileUploaderDropzone"] button:hover {
     background-color: #1a56cc !important;
 }
