@@ -14,7 +14,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CSS_FILE_NAME = PROJECT_ROOT / "public" / "css" / "main.css"
 FOOTER_BANNER_FILE_NAME = PROJECT_ROOT / "public" / "images" / "footer_banner.png"
 RIGHT_BANNER_FILE_NAME = PROJECT_ROOT / "public" / "images" / "right_banner.png"
-LOCALHOST = str("http://127.0.0.1:8000/")
+LOCALHOST = "http://127.0.0.1:8000/"
 DETECT_URL = f"{LOCALHOST}detect"
 
 def load_css(file_name):
@@ -169,9 +169,6 @@ def main_page():
                         """, unsafe_allow_html=True)
                     # ==========================================
                     
-                    # 선택된 이미지 화면 출력
-                    st.image(uploaded_file, width="stretch")
-                    
                     # 이미지가 있을 때만 "탐지", "닫기" 버튼 활성화
                     btn_col1, btn_col2 = st.columns(2)
                     
@@ -188,6 +185,9 @@ def main_page():
                             st.session_state['uploader_key'] += 1
                             # st.session_state['show_detect_msg'] = False # 탐지 메시지도 함께 지움
                             st.rerun() # 즉시 화면 새로고침
+                            
+                    # 선택된 이미지 화면 출력
+                    st.image(uploaded_file, width="stretch")
 
                     # 탐지 버튼 클릭 시 메시지 출력
                     # if st.session_state['show_detect_msg']:
