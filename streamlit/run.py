@@ -7,6 +7,10 @@ python run.py
 * 파이썬 공식 문서
 sys.exit(1) 함수
 참고: https://docs.python.org/ko/3/library/sys.html#sys.exit
+
+* Claude Code AI 도구 활용
+참고: https://claude.ai/chat/1975d7a7-892a-470d-8251-188680018c56
+참고 2: https://youtu.be/Ejl-ETc5Ojw?si=VXwPYpazRI_WmxxY
 """
 
 import os

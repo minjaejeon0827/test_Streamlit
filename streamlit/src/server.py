@@ -53,7 +53,7 @@ async def detect_pill(file: UploadFile = File(...)):
             if img.format not in ALLOWED_IMAGE_FORMATS:
                 raise HTTPException(status_code=400, detail=f"위험 감지! 허용되지 않은 포맷({img.format})입니다.")
 
-            # 🌟 핵심: 깨끗한 새 도화지(메모리 공간)를 준비합니다.
+            # 핵심: 깨끗한 메모리 공간 준비.
             secure_image_io = io.BytesIO()
             
             # 원래 이미지의 생김새만 그대로 새 도화지에 다시 그려서(저장해서) 덮어씌웁니다!
