@@ -8,8 +8,13 @@
 
 # server.py
 import io
+import os
+import tempfile
+from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from PIL import Image, UnidentifiedImageError
+from detect_tests.security import sanitize_image_bytes
+from detect_tests.model import predict
 
 app = FastAPI(title="Health-Eat API Server")
 
@@ -24,7 +29,7 @@ async def root():
     try:
         # 실제 환경에서는 DB 연결 확인이나 GPU 상태 등 체크 가능.
         return {
-            "status": "success", 
+            "status": "success",
             "message": "Health-Eat AI FastAPI 서버 정상 작동 중!",
             "version": "1.0"
         }
@@ -35,52 +40,68 @@ async def root():
 @app.post("/detect")
 async def detect_pill(file: UploadFile = File(...)):
     """
-    강력한 시큐어 코딩(이미지 재가공)이 적용된 탐지 엔드포인트
+    강력한 시큐어 코딩(이미지 재가공)이 적용된 객체 탐지 엔드포인트
     """
     try:
         # 1. 클라이언트가 보낸 파일을 메모리에서 읽어옵니다. (아직 서버 하드디스크에 저장 안 함!)
         contents = await file.read()
         
-        # ==========================================
-        # 🛡️ 시큐어 코딩 2단계: 이미지 재가공 (Re-encoding) 및 스텔스 파일 정화
-        # ==========================================
-        try:
-            # 해커가 보낸 파일(곰 인형)을 Pillow 공장에 넣어서 엽니다.
-            # (만약 여기서 그림 파일이 아니라 그냥 악성 스크립트면 바로 에러가 나면서 튕겨 나갑니다)
-            img = Image.open(io.BytesIO(contents))
-            
-            # 파일의 진짜 포맷이 우리가 허락한 것(JPEG, PNG 등)인지 확인합니다.
-            if img.format not in ALLOWED_IMAGE_FORMATS:
-                raise HTTPException(status_code=400, detail=f"위험 감지! 허용되지 않은 포맷({img.format})입니다.")
-
-            # 핵심: 깨끗한 메모리 공간 준비.
-            secure_image_io = io.BytesIO()
-            
-            # 원래 이미지의 생김새만 그대로 새 도화지에 다시 그려서(저장해서) 덮어씌웁니다!
-            # 이때 끝에 몰래 붙어있던 악성 스크립트(PHP 등)는 그림 데이터가 아니기 때문에 전부 버려집니다.
-            img.save(secure_image_io, format=img.format)
-            
-            # 이제 불순물이 완벽히 제거된 100% 순수 이미지 데이터만 남았습니다.
-            clean_image_bytes = secure_image_io.getvalue()
-            
-        except UnidentifiedImageError:
-            # 아예 열리지도 않는 가짜 이미지(실행 파일 위장 등)를 잡아냅니다.
-            raise HTTPException(status_code=400, detail="위험 감지! 손상되었거나 이미지가 아닌 파일입니다.")
-        # ==========================================
-
-        # 철통 방어 검증 통과! 
+        # 시큐어 코딩 검증 처리 
+        clean_image_bytes = sanitize_image_bytes(contents)
+        
         # 이제 이 깨끗한 clean_image_bytes를 AI(YOLO 모델)에게 넘겨서 탐지하면 됩니다.
-        
         file_name = file.filename
+
+        # 학습된 모델로 예측
+        print("\n=== 예측 ===")
+
+        # predict()는 파일 경로(str)를 입력받으므로, clean_image_bytes를 임시 파일로 저장
+        suffix = Path(file_name).suffix if file_name else ".jpg"
+        tmp_fd, tmp_path = tempfile.mkstemp(suffix=suffix)
+        try:
+            with os.fdopen(tmp_fd, "wb") as tmp_file:
+                tmp_file.write(clean_image_bytes)
+
+            # results = predict(tmp_path, conf=0.25, use_ocr=True, use_stage2=True)
+            (results, predicted_image_path) = predict(tmp_path, conf=0.25, use_ocr=True, use_stage2=True)
+        finally:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
+        # TODO: 예측 결과 파싱 안 하고 예측 시각화한 이미지 파일 리턴하도록 구현 예정(2026.05.05 minjae) 
+        # 예측 결과 파싱
+        detected_pills = []
+        if results:
+            for r in results:
+                for box in r.boxes:
+                    print(f"box: {box}")
+                    # 필요시 아래 주석친 코드 사용 예정(2026.05.06 minjae)
+                    # score    = float(box.conf[0])
+                    label = int(box.cls[0])
+                    class_name = r.names[label]
+                    detected_pills.append({
+                        "label": label,
+                        "name": class_name,
+                        # 필요시 아래 주석친 코드 사용 예정(2026.05.06 minjae)
+                        # "confidence": round(score, 4),
+                        # "bbox":       [round(v, 2) for v in box.xyxy[0].tolist()],
+                    })
         
+        # ==========================================
+        # label 값 기준 오름차순 정렬 - .sort() 메서드 활용 (리스트 객체 원본 자체 정렬)
+        # ==========================================
+        detected_pills.sort(key=lambda x: x["label"])
+        print(f"detected_pills: {detected_pills}")
+        # print(f"results: {results}")
+
         return {
             "status": "success",
-            "message": f"'{file_name}' 시큐어 검증 및 정화 완료! 안전하게 AI 탐지를 시작합니다.",
-            "detected_pills": ["타이레놀(예시)"] 
+            "message": f"🎉 알약 탐지 성공!",
+            "detected_pills": detected_pills,
+            "predicted_image_path": predicted_image_path
         }
         
-    except HTTPException as http_exc:
-        # 위에서 발생시킨 400 에러를 프론트엔드로 전달
-        raise http_exc
+    except HTTPException as http_e:
+        raise http_e  # 위에서 발생시킨 400 에러 streamlit 메인 웹페이지(main_page.py) 전달
     except Exception as e:
         return {"status": "error", "message": f"서버 내부 오류: {str(e)}"}
