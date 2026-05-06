@@ -8,6 +8,7 @@ streamlit 메인 웹페이지.
 import streamlit as st
 import requests
 from pathlib import Path
+from fastapi import UploadFile
 
 # 프로젝트 루트 디렉토리 설정
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -17,7 +18,7 @@ RIGHT_BANNER_FILE_NAME = PROJECT_ROOT / "public" / "images" / "right_banner.png"
 LOCALHOST = "http://127.0.0.1:8000/"
 DETECT_URL = f"{LOCALHOST}detect"
 
-def load_css(file_name):
+def load_css(file_name: str) -> None:
     """main.css 파일 로드 및 Streamlit 적용"""
 
     try:
@@ -40,45 +41,69 @@ def display_server_connection():
             
     # except requests.exceptions.ConnectionError:
     except requests.exceptions.RequestException:
-        st.sidebar.error("🔴 서버 꺼져있음")  # ConnectionError뿐만 아니라 Timeout 등 모든 요청 관련 에러 포괄하여 처리
+        st.sidebar.error("🔴 서버 꺼져있음")  # ConnectionError뿐만 아니라 Timeout 등 모든 요청 관련 오류 포괄하여 처리
     
-def post_detect_async(uploaded_file):
+def post_detect_async(uploaded_file: UploadFile, msg_container) -> None:
     # 1. 서버로 보낼 '파일 상자' 만들기
     # (파일 이름, 파일의 실제 데이터, 파일 종류) 순서로 포장.
     files = {"file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)}
         
-    try:             
+    try:
         # 2. FastAPI 서버의 /detect 창구로 POST 통신(요청) 쏘기!
         # timeout=10 은 서버가 10초 안에 답이 없으면 포기.
         response = requests.post(DETECT_URL, files=files, timeout=10)
-                                        
+      
+        # 아래 주석친 코드 필요시 참고 (2026.05.06 minjae)
+        # raise Exception("[테스트] 서버 통신 오류")  # 예외 발생시킴
+        # raise requests.exceptions.RequestException("[테스트] 서버 통신 오류")  # 예외 발생시킴
+
         # 3. 서버가 무사히 답장을 줬는지(200 OK) 확인하기
         if response.status_code == 200:
             # 서버가 준 JSON 답장을 파이썬 딕셔너리 변환.
             result = response.json()
-            st.success(f"🎉 탐지 성공! 서버 메시지: {result['message']}")
-            st.info(f"💊 찾은 알약: {', '.join(result['detected_pills'])}")
-        else:
+            # 전달받은 넓은 공간(msg_container)에 메시지 출력
+            msg_container.success(f"{result['message']}")
+
+            if len(result['detected_pills']) > 0:
+                # 파이썬 리스트 내포(List Comprehension) 문법을 사용해 이름만 추출
+                pill_names = [pill['name'] for pill in result['detected_pills']]
+                # 마크다운 글머리 기호('- ')를 붙여서 깔끔한 리스트 형태로 출력.
+                formatted_names = '\n- '.join(pill_names)
+                msg_container.info(f"💊 탐지한 알약 목록\n- {formatted_names}")
+            else:
+                msg_container.info("💊 탐지한 알약 없음.")
+                
             # ==========================================
-            # 에러가 났을 때 서버가 보낸 진짜 이유(detail) 꺼내 읽기!
+            # 탐지 성공: Session State 업데이트
+            # ==========================================
+            st.session_state['detect_result'] = "success"
+            st.session_state['predicted_image_path'] = result['predicted_image_path']
+        else:
+            # 탐지 실패 (서버 오류 응답): Session State 업데이트
+            st.session_state['detect_result'] = "failure"
+            
+            # ==========================================
+            # 오류 발생 시 서버가 보낸 진짜 이유(detail) 꺼내 읽기!
             # ==========================================
             try:
-                # 서버가 보낸 에러 포장지(JSON)를 풉니다.
+                # 서버가 보낸 오류 응답 메시지(JSON) 파이썬 객체 변환.
                 error_data = response.json()
                 
                 # 포장지 안에 'detail'이라는 쪽지가 있으면 읽고, 없으면 기본 메시지 출력
                 error_detail = error_data.get("detail", "알 수 없는 에러가 발생했습니다.")
                 
-                # 우리가 원하던 바로 그 형태의 에러 메시지를 화면에 띄웁니다!
-                st.error(f"⚠️ {response.status_code} Bad Request: {error_detail}")
+                # 우리가 원하던 바로 그 형태의 오류 메시지를 화면에 띄우기
+                msg_container.error(f"⚠️ {response.status_code} Bad Request: {error_detail}")
                 
             except ValueError:
                 # 만약 서버가 치명적으로 고장나서 JSON 포장지조차 못 만들고 죽었을 때를 대비한 안전망
-                st.error(f"⚠️ 서버 오류 발생! (상태 코드: {response.status_code})")                   
+                msg_container.error(f"⚠️ 서버 오류 발생! (상태 코드: {response.status_code})")                   
     
     except requests.exceptions.RequestException as e:
+        # 통신 실패: Session State 업데이트
+        st.session_state['detect_result'] = "failure"
         # 서버가 꺼져있거나 통신이 끊겼을 때 프로그램이 죽지 않게 막아주기.
-        st.error(f"🔴 서버 통신 불가. (에러: {e})")
+        msg_container.error(f"🔴 서버 통신 불가. (오류: {e})")
     
 def main_page():
     """Streamlit 메인 웹페이지"""
@@ -98,7 +123,7 @@ def main_page():
         )
         
         # ==========================================
-        # 상태 관리 (Session State) 초기화
+        # 상태 관리 (Session State) 초기화 세팅
         # ==========================================
         # '닫기' 버튼을 눌렀을 때 파일 업로더를 강제로 비우기 위한 고유 키(Key)
         if 'uploader_key' not in st.session_state:
@@ -107,8 +132,16 @@ def main_page():
         # '탐지' 버튼을 눌렀을 때 메시지를 띄울지 여부를 결정하는 상태 값
         if 'show_detect_msg' not in st.session_state:
             st.session_state['show_detect_msg'] = False
+            
+        if 'detect_result' not in st.session_state:
+            st.session_state['detect_result'] = None  # None(탐지전), "success"(성공), "failure"(실패)
         
-
+        if 'predicted_image_path' not in st.session_state:
+            st.session_state['predicted_image_path'] = None
+        
+        if 'last_uploaded_file' not in st.session_state:
+            st.session_state['last_uploaded_file'] = None
+        
         # 2. 커스텀 CSS (프로토타입 디자인 적용)
         load_css(str(CSS_FILE_NAME))
 
@@ -158,36 +191,104 @@ def main_page():
                     pass
                 else:
                     # ==========================================
-                    # 핵심 추가 코드: 이미지가 업로드되면 업로더 전체를 화면에서 숨깁니다!
+                    # 새로운 이미지 파일 업로드 시 이전 탐지 상태 초기화
+                    # ==========================================
+                    if st.session_state['last_uploaded_file'] != uploaded_file.name:
+                        st.session_state['last_uploaded_file'] = uploaded_file.name
+                        st.session_state['detect_result'] = None
+                        st.session_state['predicted_image_path'] = None
+                    
+                    # ==========================================
+                    # 이미지 파일 업로드 시 업로더 전체 화면 여백 까지 완전히 삭제!
                     # ==========================================
                     st.markdown("""
                         <style>
-                        [data-testid="stFileUploader"] {
+                        /* 1. 파일 업로더를 감싸는 껍데기 전체를 완전히 삭제하여 빈 간격 제거 */
+                        div.element-container:has([data-testid="stFileUploader"]) {
+                            display: none !important;
+                        }
+                        
+                        /* 2. 이 스타일 코드를 주입하는 마크다운 자체의 껍데기 여백도 완전 삭제 */
+                        div.element-container:has(style) {
                             display: none !important;
                         }
                         </style>
                         """, unsafe_allow_html=True)
                     # ==========================================
                     
-                    # 이미지가 있을 때만 "탐지", "닫기" 버튼 활성화
-                    btn_col1, btn_col2 = st.columns(2)
+                    msg_container = st.container()  # "탐지", "닫기" 버튼 위에 메시지만을 위한 별도 공간 생성
                     
-                    with btn_col1:
-                        if st.button("탐지", width="stretch"):
-                            # st.session_state['show_detect_msg'] = True
-                            with st.spinner("AI가 알약을 꼼꼼히 분석하고 있어요... 🔍"):
-                                post_detect_async(uploaded_file)
+                    # 아래 주석친 코드 필요 시 참고(2026.05.06 minjae)
+                    # btn_col1, btn_col2 = st.columns(2)  # 이미지 있을 때만 "탐지", "닫기" 버튼 활성화
                     
-                    with btn_col2:
-                        if st.button("닫기", width="stretch"):
-                            # 닫기 누르면 이미지 초기화
-                            # uploader_key 숫자를 1 올리면, Streamlit은 파일 업로더가 완전히 새로 생긴 줄 알고 안의 파일을 비워버립니다.
-                            st.session_state['uploader_key'] += 1
-                            # st.session_state['show_detect_msg'] = False # 탐지 메시지도 함께 지움
-                            st.rerun() # 즉시 화면 새로고침
+                    # with btn_col1:
+                    #     if st.button("탐지", width="stretch"):
+                    #         # st.session_state['show_detect_msg'] = True
+                    #         with st.spinner("AI가 알약을 꼼꼼히 분석하고 있어요... 🔍"):
+                    #             post_detect_async(uploaded_file, msg_container)
+                    
+                    # with btn_col2:
+                    #     if st.button("닫기", width="stretch"):
+                    #         # 닫기 버튼 클릭 시 상태 완벽 초기화(이미지 포함)
+                    #         # uploader_key 숫자를 1 올리면, Streamlit은 파일 업로더가 완전히 새로 생긴 줄 알고 안의 파일을 비워버립니다.
+                    #         st.session_state['uploader_key'] += 1
+                    #         st.session_state['detect_result'] = None
+                    #         st.session_state['predicted_image_path'] = None
+                    #         st.session_state['last_uploaded_file'] = None
+                    #         # st.session_state['show_detect_msg'] = False # 탐지 메시지도 함께 지움
+                    #         st.rerun() # 즉시 화면 새로고침
                             
-                    # 선택된 이미지 화면 출력
-                    st.image(uploaded_file, width="stretch")
+                    # ==========================================
+                    # 닫기 동작 깔끔하게 처리할 콜백 함수 정의
+                    # ==========================================
+                    def reset_state():
+                        st.session_state['uploader_key'] += 1
+                        st.session_state['detect_result'] = None
+                        st.session_state['predicted_image_path'] = None
+                        st.session_state['last_uploaded_file'] = None
+
+                    # 버튼들을 담을 '빈 상자(placeholder)' 생성
+                    btn_container = st.empty()
+                    detect_clicked = False
+
+                    # 상태에 따라 빈 상자 안에 버튼 그리기
+                    with btn_container.container():
+                        if st.session_state['detect_result'] == 'failure':
+                            # 탐지 실패 시: 닫기 버튼 하나만 전체 너비(100%)로 표시
+                            st.button("닫기", width="stretch", key="btn_close_fail", on_click=reset_state)
+                        else:
+                            # 초기 상태 또는 성공 시: 탐지/닫기 두 버튼을 나란히 표시
+                            btn_col1, btn_col2 = st.columns(2)
+                            with btn_col1:
+                                detect_clicked = st.button("탐지", width="stretch")
+                            with btn_col2:
+                                st.button("닫기", width="stretch", key="btn_close_normal", on_click=reset_state)
+                    
+                    # 탐지 버튼 클릭 시 실행 로직
+                    if detect_clicked:
+                        with st.spinner("AI가 알약을 꼼꼼히 분석하고 있어요... 🔍"):
+                            post_detect_async(uploaded_file, msg_container)
+                        
+                        # 탐지가 실패로 끝나면 즉시 '빈 상자'를 비우고 닫기 버튼 1개만 다시 그리기!
+                        if st.session_state['detect_result'] == 'failure':
+                            btn_container.empty()
+                            with btn_container.container():
+                                st.button("닫기", width="stretch", key="btn_close_fail_after", on_click=reset_state)
+
+                    # ==========================================
+                    # 3가지 조건에 따른 이미지 출력 로직
+                    # ==========================================
+                    if st.session_state['detect_result'] == 'success' and st.session_state['predicted_image_path']:
+                        # 조건 2: 탐지 성공 시 -> 예측 시각화 이미지 출력
+                        st.image(st.session_state['predicted_image_path'], width="stretch")
+                        
+                    elif st.session_state['detect_result'] == 'failure':
+                        # 조건 3: 탐지 실패 시 -> 이미지 화면 출력 안 함 (pass)
+                        pass
+                        
+                    else:
+                        # 조건 1: 사진 업로드 성공 (탐지 버튼 누르기 전) -> 원본 이미지 출력
+                        st.image(uploaded_file, width="stretch")
 
                     # 탐지 버튼 클릭 시 메시지 출력
                     # if st.session_state['show_detect_msg']:
